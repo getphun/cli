@@ -12,7 +12,7 @@ class Phun
         [ ['-v', '--version'],  'appVersion',   'Show version number' ],
         [ ['create'],           'modCreate',    'Create new blank module', 'phun create <module>' ],
 //         [ ['init'],             'modInit',      'Create new project on current directory' ],
-//         [ ['model'],            'modModel',     'Create new blank model', 'phun model <table> <q_field>' ],
+        [ ['model'],            'modModel',     'Create new blank model under some module', 'phun model <module> <table> <q_field>' ],
         [ ['sync'],             'modSync',      'Sync some module to any other project', 'phun sync <module> <target> <rule>' ],
         [ ['watch'],            'modWatch',     'Watch module files change and sync with any other project', 'phun watch <module> <target> <rule>' ]
     ];
@@ -199,9 +199,7 @@ class Phun
         $project_dir = $here . '/' . $name;
         $module_dir  = $project_dir . '/' . $base;
         
-        $module = str_replace('-', ' ', $name);
-        $module = ucwords($module);
-        $module = str_replace(' ', '', $module);
+        $module = self::toNameSpace($name);
         
         // __version ///////////////////////////////////////////////////////////
         $ver = '0.0.1';
@@ -233,7 +231,7 @@ class Phun
         
         // _services ///////////////////////////////////////////////////////////
         while($ser=readline('Service: ')){
-            if(!preg_match('!^[a-z]+$!', $ser)){
+            if(!preg_match('!^[a-zA-Z]+$!', $ser)){
                 Phun::echo('Invalid service name, please use only (a-z)');
                 continue;
             }
@@ -289,6 +287,67 @@ class Phun
         
         self::echo("Module \033[1m{$module}\033[0m already created.");
         exit;
+    }
+    
+    static function modModel($args){
+        $module = isset($args[0]) ? $args[0] : null;
+        $table  = isset($args[1]) ? $args[1] : null;
+        $qfield = isset($args[2]) ? $args[2] : null;
+        
+        $here = getcwd();
+        
+        if(!$module || !$table)
+            return self::cliError();
+        
+        $module_dir = $here . '/modules/' . $module;
+        if(!is_dir($module_dir))
+            return self::close("Module named \033[1m{$module}\033[0m not found");
+        
+        $module_config_file = $module_dir . '/config.php';
+        if(!is_file($module_config_file))
+            return self::close("Module config file not found");
+        
+        $module_config = include $module_config_file;
+        
+        $module_ns = self::toNameSpace($module);
+        
+        $model_name = self::toNameSpace($table);
+        $model_dir  = $module_dir . '/model';
+        $model_file = $model_dir . '/' . $model_name . '.php';
+        if(!is_dir($model_dir))
+            self::r_mkdir($model_dir);
+        
+        // Model File
+        $nl = PHP_EOL;
+        $tx = '<?php' . $nl;
+        $tx.= '/**' . $nl;
+        $tx.= ' * ' . $table . ' model' . $nl;
+        $tx.= ' * @package ' . $module . $nl;
+        $tx.= ' * @version ' . $module_config['__version'] . $nl;
+        $tx.= ' * @upgrade true' . $nl;
+        $tx.= ' */' . $nl;
+        $tx.= $nl;
+        $tx.= 'namespace ' . $module_ns . '\\Model;' . $nl;
+        $tx.= $nl;
+        $tx.= 'class ' . $model_name . ' extends \\Model' . $nl;
+        $tx.= '{' . $nl;
+        $tx.= '    public $table = \'' . $table . '\';' . $nl;
+        if($qfield)
+        $tx.= '    public $q_field = \'' . $qfield . '\';' . $nl;
+        $tx.= '}';
+        
+        $f = fopen($model_file, 'w');
+        fwrite($f, $tx);
+        fclose($f);
+        
+        // Model Autoload 
+        $model_au_name = $module_ns . '\\Model\\' . $model_name;
+        $model_au_file = 'modules/' . $module . '/model/' . $model_name . '.php';
+        $module_config['_autoload']['classes'][$model_au_name] = $model_au_file;
+        
+        self::makeConfigFile($module_config, $module_dir);
+        
+        self::echo("Model for table \033[1m{$table}\033[0m already created.");
     }
     
     static function modSync($args){
@@ -468,6 +527,12 @@ class Phun
                 self::r_mkdir($source_abs);
             }
         }
+    }
+    
+    static function toNameSpace($str){
+        $str = preg_replace('![^a-zA-Z0-9]!', ' ', $str);
+        $str = ucwords($str);
+        return str_replace(' ', '', $str);
     }
 }
 
