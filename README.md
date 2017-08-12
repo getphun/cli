@@ -15,6 +15,7 @@ $ ln -s "$(pwd)/bash/bash_autocompletion.sh" /etc/bash_completion.d/phun
 $ phun -h
 $ phun -v
 $ phun create <module>
+$ phun install <module> for <update|install>
 $ phun model <module> <table> <q_field>
 $ phun sync <module> <target_dir> <update|install>
 $ phun watch <module> <target_dir> <update|install>

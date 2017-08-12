@@ -3,17 +3,21 @@
 
 class Phun
 {
-    static $version = '0.0.1';
+    static $version = '0.0.2';
     
     static $mod_files = [];
+    static $update_db = null;
     
     static $routes = [
         [ ['-h', '--help'],     'appHelp',      'Show this help text' ],
         [ ['-v', '--version'],  'appVersion',   'Show version number' ],
         [ ['create'],           'modCreate',    'Create new blank module', 'phun create <module>' ],
 //         [ ['init'],             'modInit',      'Create new project on current directory' ],
+        [ ['install'],          'modInstall',   'Install new module here', 'phun install <module> [for <update|install>] [from <git-url>]' ],
         [ ['model'],            'modModel',     'Create new blank model under some module', 'phun model <module> <table> <q_field>' ],
+//         [ ['remove'],           'modRemove',    'Remove exists module', 'phun remove <module>' ],
         [ ['sync'],             'modSync',      'Sync some module to any other project', 'phun sync <module> <target> <rule>' ],
+//         [ ['update'],           'modUpdate',    'Update exists module', 'phun update <module>' ],
         [ ['watch'],            'modWatch',     'Watch module files change and sync with any other project', 'phun watch <module> <target> <rule>' ]
     ];
     
@@ -111,6 +115,24 @@ class Phun
         Phun::close(sprintf('Please hit `%s --help` for more information about the command usage.', $argv[0]));
     }
     
+    static function cloneModule($git){
+        $exec_result = exec('which git 2>&1', $out, $ret);
+        if($ret)
+            return self::close('Git is not installed. Please install it to continue installation.');
+        
+        $temp = tempnam(sys_get_temp_dir(), 'phun-');
+        unlink($temp);
+        
+        $cmd = "git clone $git $temp 2>&1";
+        
+        self::echo('Cloning the project from ' . $git . ' ...');
+        $exec_result = exec($cmd, $out, $ret);
+        
+        if($ret)
+            return self::close('Unable to clone the project. Please make sure you have the correct access rights and the repository exists.');
+        return $temp;
+    }
+    
     static function close($msg){
         Phun::echo($msg);
         exit;
@@ -160,6 +182,88 @@ class Phun
         }
         
         self::cliError();
+    }
+    
+    static function installModule($module, $for, $from){
+        $here = getcwd();
+        $temp = self::cloneModule($from);
+        
+        $config = $temp . '/modules/' . $module . '/config.php';
+        if(!is_file($config))
+            self::close("Module named \033[1m{$module}\033[0m is broken.");
+        
+        self::echo("Installing module \033[1m{$module}\033[0m ...");
+        $config = require $config;
+        $files  = $config['__files'];
+        self::$mod_files = self::scanModuleFiles($files, $temp);
+        self::syncModuleFiles(self::$mod_files, $temp, $here, 'install');
+        $exec_ret = exec('rm -Rf ' . $temp, $out, $ret);
+        
+        $devs = $config['__dependencies'] ?? null;
+        if($devs){
+            foreach($devs as $mod){
+                $required = !strstr($mod, '/');
+                $mods = explode('/', $mod);
+                foreach($mods as $mo){
+                    $mo  = trim($mo);
+                    if(!$mo)
+                        continue;
+                    $git = 'git@github.com:getphun/' . $mo . '.git';
+                    if(is_dir($here . '/modules/' . $mo))
+                        continue;
+                    
+                    $conf = true;
+                    if(!$required){
+                        $ask_conf = readline("Module \033[1m{$mo}\033[0m is optional, would you like me to install it? ([Y]es/no): ");
+                        $ask_conf = strtolower($ask_conf);
+                        if($ask_conf == 'no' || $ask_conf == 'n')
+                            $conf = false;
+                    }
+                    
+                    if($conf)
+                        self::installModule($mo, $for, $git);
+                }
+            }
+        }
+        
+        // update database if exists
+        $db_dir = $here . '/modules/' . $module . '/_db';
+        if(!is_dir($db_dir))
+            return;
+        
+        $global_db_dir = $here . '/.db';
+        if(!is_dir($global_db_dir))
+            mkdir($global_db_dir);
+        
+        $module_db = file_get_contents($db_dir . '/install.sql');
+        
+        $db_install = $global_db_dir . '/install.sql';
+        $f = fopen($db_install, 'a');
+        fwrite($f, "-- $module $config[__version]");
+        fwrite($f, "\n");
+        fwrite($f, $module_db);
+        fwrite($f, "\n\n");
+        fclose($f);
+        
+        if($for != 'update')
+            return;
+        
+        $db_update = $global_db_dir . '/update.sql';
+        if(is_file($db_update) && is_null(self::$update_db)){
+            self::$update_db = true;
+            
+            $target_file = readline('File update.sql already exists. Would you like me to update it? ([Y]es/no): ');
+            $target_file = strtolower($target_file);
+            if( $target_file == 'no' || $target_file == 'n' )
+                unlink($db_update);
+        }
+        
+        $f = fopen($db_update, 'a');
+        fwrite($f, "-- $module $config[__version]");
+        fwrite($f, "\n");
+        fwrite($f, $module_db);
+        fwrite($f, "\n\n");
+        fclose($f);
     }
     
     static function isIndexedArray($array){
@@ -287,6 +391,46 @@ class Phun
         
         self::echo("Module \033[1m{$module}\033[0m already created.");
         exit;
+    }
+    
+    static function modInstall($args){
+        $here   = getcwd();
+        $module = $args[0] ?? null;
+        $ab1k   = $args[1] ?? null;
+        $ab1v   = $args[2] ?? null;
+        $ab2k   = $args[3] ?? null;
+        $ab2v   = $args[4] ?? null;
+        
+        if(!$module)
+            return self::cliError();
+        
+        $module_dir = $here . '/modules/' . $module;
+        if(is_dir($module_dir))
+            return self::close("Module named \033[1m{$module}\033[0m already exists");
+        
+        $for    = 'install';
+        $from   = null;
+        
+        if($ab1k == 'for')
+            $for = $ab1v;
+        if($ab2k == 'for')
+            $for = $ab2v;
+        if(!in_array($for, ['install', 'update']))
+            return self::cliError();
+        
+        if($ab1k == 'from')
+            $from = $ab1v;
+        if($ab2k == 'from')
+            $from = $ab2v;
+        
+        if(is_null($from))
+            $from = 'git@github.com:getphun/' . $module . '.git';
+        
+        if(!preg_match('!^git@([a-z0-9-.]+):([^\/]+)\/([^.]+)\.git$!', $from))
+            return self::close("Module git repository URL is not valid.");
+        
+        self::installModule($module, $for, $from);
+        self::echo("Module \033[1m{$module}\033[0m and all it's dependencies installed.");
     }
     
     static function modModel($args){

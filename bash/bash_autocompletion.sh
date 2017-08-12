@@ -21,16 +21,27 @@ _phun__module_list(){
 }
 
 _phun(){
-    local cur cmd
+    local cur cmd larg
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     cmd="${COMP_WORDS[1]}"
     arglen="$COMP_CWORD"
-    options="-h --help -v --version create model sync watch"
+    larg="${COMP_WORDS[(arglen-1)]}"
+    options="-h --help -v --version create install model sync watch"
 
     case "${cmd}" in
 
         -h|--help|-v|--version|create)
+            return 0
+            ;;
+        
+        install)
+            if [[ $arglen = 3 ]]; then
+                COMPREPLY=( $(compgen -W "for from" -- ${cur}) )
+            elif [[ $arglen = 4 && "$larg" = "for" ]]; then
+                COMPREPLY=( $(compgen -W "update install" -- ${cur}) )
+            fi
+            
             return 0
             ;;
         
