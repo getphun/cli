@@ -27,7 +27,7 @@ _phun(){
     cmd="${COMP_WORDS[1]}"
     arglen="$COMP_CWORD"
     larg="${COMP_WORDS[(arglen-1)]}"
-    options="-h --help -v --version create install model sync watch"
+    options="-h --help -v --version create install model remove sync watch"
 
     case "${cmd}" in
 
@@ -45,14 +45,14 @@ _phun(){
             return 0
             ;;
         
-        model)
+        model|remove)
             if [[ $arglen = 2 ]]; then
                 COMPREPLY=( $(compgen -W "$(_phun__module_list)" -- ${cur}) )
             fi
             
             return 0
             ;;
-
+            
         sync|watch)
             if [[ $arglen = 2 ]]; then
                 COMPREPLY=( $(compgen -W "$(_phun__module_list)" -- ${cur}) )

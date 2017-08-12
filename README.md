@@ -17,6 +17,7 @@ $ phun -v
 $ phun create <module>
 $ phun install <module> for <update|install>
 $ phun model <module> <table> <q_field>
+$ phun remove <module>
 $ phun sync <module> <target_dir> <update|install>
 $ phun watch <module> <target_dir> <update|install>
 ```

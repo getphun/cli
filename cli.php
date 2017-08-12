@@ -15,7 +15,7 @@ class Phun
 //         [ ['init'],             'modInit',      'Create new project on current directory' ],
         [ ['install'],          'modInstall',   'Install new module here', 'phun install <module> [for <update|install>] [from <git-url>]' ],
         [ ['model'],            'modModel',     'Create new blank model under some module', 'phun model <module> <table> <q_field>' ],
-//         [ ['remove'],           'modRemove',    'Remove exists module', 'phun remove <module>' ],
+        [ ['remove'],           'modRemove',    'Remove exists module', 'phun remove <module>' ],
         [ ['sync'],             'modSync',      'Sync some module to any other project', 'phun sync <module> <target> <rule>' ],
 //         [ ['update'],           'modUpdate',    'Update exists module', 'phun update <module>' ],
         [ ['watch'],            'modWatch',     'Watch module files change and sync with any other project', 'phun watch <module> <target> <rule>' ]
@@ -252,7 +252,7 @@ class Phun
         if(is_file($db_update) && is_null(self::$update_db)){
             self::$update_db = true;
             
-            $target_file = readline('File update.sql already exists. Would you like me to update it? ([Y]es/no): ');
+            $target_file = readline('File update.sql already exists. Would you like me to update it? Select [no] to overwrite it ([Y]es/no): ');
             $target_file = strtolower($target_file);
             if( $target_file == 'no' || $target_file == 'n' )
                 unlink($db_update);
@@ -434,9 +434,9 @@ class Phun
     }
     
     static function modModel($args){
-        $module = isset($args[0]) ? $args[0] : null;
-        $table  = isset($args[1]) ? $args[1] : null;
-        $qfield = isset($args[2]) ? $args[2] : null;
+        $module = $args[0] ?? null;
+        $table  = $args[1] ?? null;
+        $qfield = $args[2] ?? null;
         
         $here = getcwd();
         
@@ -494,11 +494,63 @@ class Phun
         self::echo("Model for table \033[1m{$table}\033[0m already created.");
     }
     
+    static function modRemove($args){
+        $module = $args[0] ?? null;
+        $here   = getcwd();
+        
+        if(!$module)
+            return self::cliError();
+        
+        $module_dir = $here . '/modules/' . $module;
+        if(!is_dir($module_dir))
+            return self::close("Module named \033[1m{$module}\033[0m not found");
+        
+        $config = require $module_dir . '/config.php';
+        $files  = $config['__files'];
+        self::$mod_files = self::scanModuleFiles($files, $here);
+        
+        // remove.sql?
+        $remove_sql = $module_dir . '/_db/remove.sql';
+        if(is_file($remove_sql)){
+            $conf = readline('There\'s remove.sql file on the module. Would you like to put it to update.sql file? ([Y]es/no): ');
+            $conf = strtolower($conf);
+            
+            if(!$conf || $conf == 'y' || $conf == 'yes'){
+                $db_update = $here . '/.db/update.sql';
+                if(is_file($db_update)){
+                    $target_file = readline('File update.sql already exists. Would you like me to update it? Select [no] to overwrite it ([Y]es/no): ');
+                    $target_file = strtolower($target_file);
+                    if( $target_file == 'no' || $target_file == 'n' )
+                        unlink($db_update);
+                }
+                $f = fopen($db_update, 'a');
+                fwrite($f, "-- $module $config[__version]");
+                fwrite($f, "\n");
+                fwrite($f, file_get_contents($remove_sql));
+                fwrite($f, "\n\n");
+                fclose($f);
+            }
+        }
+        
+        foreach(self::$mod_files as $file => $cond){
+            if(!in_array('remove', $cond['rules']))
+                continue;
+            
+            $abs = $here . '/' . $file;
+            if(is_dir($abs))
+                $exec_ret = exec('rm -Rf ' . $abs, $out, $ret);
+            elseif(is_file($abs))
+                unlink($abs);
+        }
+        
+        self::echo("Module \033[1m{$module}\033[0m already removed.");
+    }
+    
     static function modSync($args){
         $here = getcwd();
-        $module = isset($args[0]) ? $args[0] : null;
-        $target = isset($args[1]) ? $args[1] : null;
-        $rule   = isset($args[2]) ? $args[2] : 'install';
+        $module = $args[0] ?? null;
+        $target = $args[1] ?? null;
+        $rule   = $args[2] ?? 'install';
         
         if(!$module || !$target || !in_array($rule, ['install', 'update']))
             return self::cliError();
@@ -523,9 +575,9 @@ class Phun
     
     static function modWatch($args){
         $here = getcwd();
-        $module = isset($args[0]) ? $args[0] : null;
-        $target = isset($args[1]) ? $args[1] : null;
-        $rule   = isset($args[2]) ? $args[2] : 'install';
+        $module = $args[0] ?? null;
+        $target = $args[1] ?? null;
+        $rule   = $args[2] ?? 'install';
         
         if(!$module || !$target || !in_array($rule, ['install', 'update']))
             return self::cliError();
