@@ -552,10 +552,39 @@ class Phun
         $target = $args[1] ?? null;
         $rule   = $args[2] ?? 'install';
         
+        $multiple = false;
         if(!$module || !$target || !in_array($rule, ['install', 'update']))
             return self::cliError();
         
+        if(substr($target,-1) == '.')
+            $multiple = true;
         $target = realpath($here . '/' . $target);
+        
+        if(!$multiple)
+            $targets = [$target=>'force'];
+        else{
+            $targets = [];
+            $dirs = array_diff(scandir($target), ['.','..']);
+            if(!$dirs)
+                return self::close("Target dir is empty");
+            
+            foreach($dirs as $dir){
+                if($dir == '_source')
+                    continue;
+                $tgr = $target.'/'.$dir.'/site';
+                if(!is_dir($tgr))
+                    continue;
+                $tgrm = $tgr.'/modules';
+                if(!is_dir($tgrm))
+                    continue;
+                $tgrm = $tgrm.'/'.$module;
+                if(!is_dir($tgrm)){
+                    $targets[$tgr] = 'not installed';
+                }else{
+                    $targets[$tgr] = 'ask';
+                }
+            }
+        }
         
         $module_base = 'modules/' . $module;
         $module_dir  = $here . '/' . $module_base;
@@ -567,9 +596,22 @@ class Phun
         $files  = $config['__files'];
         self::$mod_files = self::scanModuleFiles($files, $here);
         
-        self::syncModuleFiles(self::$mod_files, $here, $target, $rule);
+        foreach($targets as $target => $cond){
+            if($cond === 'not installed' || $cond === 'ask'){
+                $conf = true;
+                $exists = $cond === 'ask' ? 'exists' : 'not installed';
+                $ask_conf = readline("Sync to \033[1m{$target}\033[0m? ($exists) ([Y]es/no): ");
+                $ask_conf = strtolower($ask_conf);
+                if($ask_conf == 'no' || $ask_conf == 'n')
+                    $conf = false;
+                if(!$conf)
+                    continue;
+            }
+            self::syncModuleFiles(self::$mod_files, $here, $target, $rule);
+            self::echo("Module \033[1m{$module}\033[0m synced to \033[1m{$target}\033[0m.");
+            self::echo("");
+        }
         
-        self::echo("Module \033[1m{$module}\033[0m synced.");
         exit;
     }
     
