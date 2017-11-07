@@ -550,7 +550,7 @@ class Phun
         $here = getcwd();
         $module = $args[0] ?? null;
         $target = $args[1] ?? null;
-        $rule   = $args[2] ?? 'install';
+        $rule   = $args[2] ?? 'update';
         
         $multiple = false;
         if(!$module || !$target || !in_array($rule, ['install', 'update']))
@@ -619,7 +619,7 @@ class Phun
         $here = getcwd();
         $module = $args[0] ?? null;
         $target = $args[1] ?? null;
-        $rule   = $args[2] ?? 'install';
+        $rule   = $args[2] ?? 'update';
         
         if(!$module || !$target || !in_array($rule, ['install', 'update']))
             return self::cliError();
