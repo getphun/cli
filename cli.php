@@ -317,10 +317,15 @@ class Phun
     static function modCompressBrotli($file){
         $target = $file . '.br';
         $mode   = BROTLI_GENERIC;
-        $mime   = mime_content_type($file);
-        if(strstr($mime, 'text'))
-            $mode = BROTLI_TEXT;
 
+        if(preg_match('!\.woff2$!', $file))
+            $mode = BROTLI_FONT;
+        else{
+            $mime   = mime_content_type($file);
+            if(strstr($mime, 'text'))
+                $mode = BROTLI_TEXT;
+        }
+        
         $content = file_get_contents($file);
         $compressed = brotli_compress($content, 11, $mode);
         if(!$compressed)
