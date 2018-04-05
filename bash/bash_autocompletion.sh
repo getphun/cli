@@ -27,11 +27,21 @@ _phun(){
     cmd="${COMP_WORDS[1]}"
     arglen="$COMP_CWORD"
     larg="${COMP_WORDS[(arglen-1)]}"
-    options="-h --help -v --version create install model remove sync watch"
+    options="-h --help -v --version compress create install model remove sync watch"
 
     case "${cmd}" in
 
         -h|--help|-v|--version|create)
+            return 0
+            ;;
+
+        compress)
+            if [[ $arglen = 2 ]]; then
+                COMPREPLY=( $(compgen -W "gzip brotli all" -- ${cur}) )
+            else
+                _filedir
+            fi
+
             return 0
             ;;
         

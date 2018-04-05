@@ -11,6 +11,7 @@ class Phun
     static $routes = [
         [ ['-h', '--help'],     'appHelp',      'Show this help text' ],
         [ ['-v', '--version'],  'appVersion',   'Show version number' ],
+        [ ['compress'],         'modCompress',  'Compress target files with custom compression', 'phun compress <gzip|brotli|all> <files>' ],
         [ ['create'],           'modCreate',    'Create new blank module', 'phun create <module>' ],
 //         [ ['init'],             'modInit',      'Create new project on current directory' ],
         [ ['install'],          'modInstall',   'Install new module here', 'phun install <module> [for <update|install>] [from <git-url>]' ],
@@ -280,6 +281,75 @@ class Phun
         $ctext = self::arrayToConfigText($config);
         fwrite($f, $ctext);
         fclose($f);
+    }
+
+    static function modCompress($args){
+        $here = getcwd();
+        $ctype = array_shift($args);
+        $accetables_types = ['all', 'brotli', 'gzip'];
+
+        if(!in_array($ctype, $accetables_types))
+            Phun::close('Compression type is not supported');
+
+        foreach($args as $file){
+            $file_abs = realpath($here . '/' . $file);
+
+            Phun::echo('Compressing file ' . $file);
+
+            if($ctype == 'all' || $ctype == 'brotli'){
+                if(!self::modCompressBrotli($file_abs))
+                    Phun::echo('    Failed on brotli compression');
+                else
+                	Phun::echo('    Brotli compression success');
+            }
+
+            if($ctype == 'all' || $ctype == 'gzip'){
+                if(!self::modCompressGZip($file_abs))
+                    Phun::echo('    Failed on gzip compression');
+                else
+                	Phun::echo('    GZip compression success');
+            }
+        }
+
+        Phun::echo('All file compression already done');
+    }
+
+    static function modCompressBrotli($file){
+        $target = $file . '.br';
+        $mode   = BROTLI_GENERIC;
+        $mime   = mime_content_type($file);
+        if(strstr($mime, 'text'))
+            $mode = BROTLI_TEXT;
+
+        $content = file_get_contents($file);
+        $compressed = brotli_compress($content, 11, $mode);
+        if(!$compressed)
+            return false;
+
+        $f = fopen($target, 'w');
+        fwrite($f, $compressed);
+        fclose($f);
+
+        return true;
+    }
+
+    static function modCompressGZip($file){
+        $target = $file . '.gz';
+        $mode   = 'wb9';
+        $error  = false;
+
+        if(false === ($fz = gzopen($target, $mode)))
+            return false;
+
+        if(false === ($f = fopen($file, 'rb')))
+            return false;
+
+        while(!feof($f))
+            gzwrite($fz, fread($f, 1024*512));
+        fclose($f);
+        gzclose($fz);
+
+        return true;
     }
     
     static function modCreate($args){
