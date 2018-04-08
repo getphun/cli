@@ -37,7 +37,7 @@ _phun(){
 
         compress)
             if [[ $arglen = 2 ]]; then
-                COMPREPLY=( $(compgen -W "gzip brotli all" -- ${cur}) )
+                COMPREPLY=( $(compgen -W "all brotli gzip webp" -- ${cur}) )
             else
                 _filedir
             fi

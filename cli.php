@@ -11,7 +11,7 @@ class Phun
     static $routes = [
         [ ['-h', '--help'],     'appHelp',      'Show this help text' ],
         [ ['-v', '--version'],  'appVersion',   'Show version number' ],
-        [ ['compress'],         'modCompress',  'Compress target files with custom compression', 'phun compress <gzip|brotli|all> <files>' ],
+        [ ['compress'],         'modCompress',  'Compress target files with custom compression', 'phun compress <all|brotli|gzip|webp> <files>' ],
         [ ['create'],           'modCreate',    'Create new blank module', 'phun create <module>' ],
 //         [ ['init'],             'modInit',      'Create new project on current directory' ],
         [ ['install'],          'modInstall',   'Install new module here', 'phun install <module> [for <update|install>] [from <git-url>]' ],
@@ -286,25 +286,37 @@ class Phun
     static function modCompress($args){
         $here = getcwd();
         $ctype = array_shift($args);
-        $accetables_types = ['all', 'brotli', 'gzip'];
+        $accetables_types = ['all', 'brotli', 'gzip', 'webp'];
 
         if(!in_array($ctype, $accetables_types))
             Phun::close('Compression type is not supported');
 
         foreach($args as $file){
-            $file_abs = realpath($here . '/' . $file);
+            $file_abs  = realpath($here . '/' . $file);
+            $file_mime = mime_content_type($file_abs);
 
             Phun::echo('Compressing file ' . $file);
 
+            if($ctype == 'all' || $ctype == 'webp'){
+                if(preg_match('!^image!', $file_mime)){
+                    if($file_mime != 'image/webp'){
+                        if(!self::modCompressWebP($file_abs, $file_mime))
+                            Phun::echo('    Failed on webp compression');
+                        else
+                            Phun::echo('    WebP compression success');
+                    }
+                }
+            }
+
             if($ctype == 'all' || $ctype == 'brotli'){
-                if(!self::modCompressBrotli($file_abs))
+                if(!self::modCompressBrotli($file_abs, $file_mime))
                     Phun::echo('    Failed on brotli compression');
                 else
                 	Phun::echo('    Brotli compression success');
             }
 
             if($ctype == 'all' || $ctype == 'gzip'){
-                if(!self::modCompressGZip($file_abs))
+                if(!self::modCompressGZip($file_abs, $file_mime))
                     Phun::echo('    Failed on gzip compression');
                 else
                 	Phun::echo('    GZip compression success');
@@ -314,17 +326,14 @@ class Phun
         Phun::echo('All file compression already done');
     }
 
-    static function modCompressBrotli($file){
+    static function modCompressBrotli($file, $mime){
         $target = $file . '.br';
         $mode   = BROTLI_GENERIC;
 
         if(preg_match('!\.woff2$!', $file))
             $mode = BROTLI_FONT;
-        else{
-            $mime   = mime_content_type($file);
-            if(strstr($mime, 'text'))
-                $mode = BROTLI_TEXT;
-        }
+        elseif(strstr($mime, 'text'))
+            $mode = BROTLI_TEXT;
         
         $content = file_get_contents($file);
         $compressed = brotli_compress($content, 11, $mode);
@@ -338,7 +347,7 @@ class Phun
         return true;
     }
 
-    static function modCompressGZip($file){
+    static function modCompressGZip($file, $mime){
         $target = $file . '.gz';
         $mode   = 'wb9';
         $error  = false;
@@ -353,6 +362,50 @@ class Phun
             gzwrite($fz, fread($f, 1024*512));
         fclose($f);
         gzclose($fz);
+
+        return true;
+    }
+
+    static function modCompressWebP($file, $mime){
+        $file_target = $file . '.webp';
+        list($width, $height, $type) = getimagesize($file);
+
+        $image_source = null;
+
+        switch($type){
+            case IMAGETYPE_GIF:
+                $image_source = imagecreatefromgif($file);
+                break;
+            case IMAGETYPE_JPEG:
+                $image_source = imagecreatefromjpeg($file);
+                break;
+            case IMAGETYPE_PNG:
+                $image_source = imagecreatefrompng($file);
+                break;
+        }
+
+        if(!$image_source)
+            return false;
+
+        $dest_image = imagecreatetruecolor($width, $height);
+        $background = imagecolorallocate($dest_image, 255, 255, 255);
+        imagefilledrectangle($dest_image, 0, 0, $width, $height, $background);
+        imageinterlace($dest_image, 1);
+        
+        imagecopyresampled(
+            $dest_image,
+            $image_source,
+            0,
+            0,
+            0,
+            0,
+            $width,
+            $height,
+            $width,
+            $height
+        );
+
+        imagewebp($dest_image, $file_target, 90);
 
         return true;
     }
